@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ICS Scheduler Lỏ - Admin Dashboard</title>
+    <style>
+        /* CSS tối giản, "UI Coder Lỏ" */
+        body {
+            font-family: monospace, sans-serif;
+            background-color: #1e1e1e;
+            color: #dcdcdc;
+            padding: 20px;
+            display: flex;
+            gap: 20px;
+        }
+        .container {
+            background-color: #252526;
+            padding: 15px;
+            border-radius: 4px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+            flex-grow: 1;
+        }
+        h2 { color: #569cd6; border-bottom: 1px solid #333; padding-bottom: 5px; }
+        input[type="text"], input[type="number"], input[type="datetime-local"], button {
+            padding: 8px;
+            margin: 5px 0;
+            border: 1px solid #333;
+            border-radius: 3px;
+            background-color: #3c3c3c;
+            color: #dcdcdc;
+            box-sizing: border-box;
+        }
+        button {
+            cursor: pointer;
+            background-color: #4a4a4a;
+            transition: background-color 0.2s;
+        }
+        button:hover {
+            background-color: #007acc;
+        }
+        .event-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 5px 0;
+            border-bottom: 1px dashed #333;
+        }
+        .event-item:last-child { border-bottom: none; }
+        
+        /* Preview */
+        #preview-schedule {
+            margin-top: 10px;
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid #333;
+            padding: 10px;
+        }
+        .schedule-entry {
+            background-color: #333;
+            margin-bottom: 8px;
+            padding: 5px;
+            border-left: 5px solid #007acc;
+        }
+        .error {
+            color: #f44747;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- CONTROL PANEL (Input & Setup) -->
+    <div class="container" style="width: 350px;">
+        <h2>1. Cấu hình Tổng thể</h2>
+        <label for="overall-start">Bắt đầu Toàn bộ:</label>
+        <input type="datetime-local" id="overall-start" value="" style="width: 100%;">
+        
+        <label for="overall-end">Kết thúc Toàn bộ:</label>
+        <input type="datetime-local" id="overall-end" value="" style="width: 100%;">
+
+        <hr style="border-color: #333; margin: 15px 0;">
+
+        <h2>2. Thêm Sự kiện</h2>
+        <label for="event-name">Tên Sự kiện/Môn học:</label>
+        <input type="text" id="event-name" placeholder="Ví dụ: Project Backend" style="width: 100%;">
+        
+        <label for="event-weight">Trọng số (Ưu tiên/Tín chỉ):</label>
+        <input type="number" id="event-weight" value="1" min="1" style="width: 100%;">
+        
+        <button onclick="App.addEvent()" style="width: 100%; margin-top: 10px;">
+            ➕ Tạo Thêm Sự kiện Mới
+        </button>
+
+        <hr style="border-color: #333; margin: 15px 0;">
+
+        <h2>3. Danh sách Sự kiện</h2>
+        <div id="events-list">
+            <!-- Events listed here -->
+        </div>
+
+        <hr style="border-color: #333; margin: 15px 0;">
+
+        <h2>4. Hành động</h2>
+        <button onclick="App.calculateSchedule()" style="width: 100%; background-color: #007acc;">
+            ⚙️ Tính Toán & Xếp Lịch Tự Động
+        </button>
+        <button onclick="App.downloadICS()" style="width: 100%; margin-top: 10px; background-color: #4CAF50;">
+            ⬇️ Tải File .ICS
+        </button>
+    </div>
+
+    <!-- PREVIEW PANEL (Visualization) -->
+    <div class="container" style="flex-grow: 2;">
+        <h2>5. Preview Lịch đã Tính Toán</h2>
+        <p id="schedule-info"></p>
+        <div id="preview-schedule">
+            <!-- Scheduled events appear here -->
+            <p>Nhấn "Tính Toán & Xếp Lịch Tự Động" để bắt đầu.</p>
+        </div>
+    </div>
+
+
+    <script>
+        // Cấu trúc Open System: Tất cả logic được đóng gói trong đối tượng App
+        const App = {
+            events: [],
+            // Cấu hình thông minh
+            CONFIG: {
+                // Tỷ lệ thời gian nghỉ (15% thời gian làm việc sẽ là thời gian nghỉ sau sự kiện)
+                REST_RATIO: 0.15, 
+                // Thời gian làm việc tối đa liên tục (phút) trước khi cần nghỉ dài hơn
+                MAX_SESSION_MINUTES: 180 
+            },
+
+            /**
+             * Thêm sự kiện mới vào mảng dữ liệu
+             */
+            addEvent: function() {
+                const nameInput = document.getElementById('event-name');
+                const weightInput = document.getElementById('event-weight');
+
+                const name = nameInput.value.trim();
+                const weight = parseInt(weightInput.value);
+
+                if (!name || isNaN(weight) || weight <= 0) {
+                    alert("Vui lòng nhập Tên và Trọng số hợp lệ (lớn hơn 0).");
+                    return;
+                }
+
+                const newEvent = {
+                    id: Date.now(),
+                    name: name,
+                    weight: weight,
+                    // Các trường sẽ được tính toán sau
+                    allocatedDurationMs: 0, 
+                    scheduledStart: null,
+                    scheduledEnd: null,
+                };
+
+                this.events.push(newEvent);
+                nameInput.value = '';
+                weightInput.value = 1; 
+                this.renderEventList();
+            },
+
+            /**
+             * Xóa sự kiện khỏi danh sách
+             */
+            removeEvent: function(id) {
+                this.events = this.events.filter(event => event.id !== id);
+                this.renderEventList();
+                this.clearPreview();
+            },
+
+            /**
+             * Cập nhật UI hiển thị danh sách sự kiện
+             */
+            renderEventList: function() {
+                const listEl = document.getElementById('events-list');
+                listEl.innerHTML = '';
+                
+                if (this.events.length === 0) {
+                    listEl.innerHTML = '<p style="color: gray;">Chưa có sự kiện nào được thêm.</p>';
+                    return;
+                }
+
+                this.events.forEach(event => {
+                    const div = document.createElement('div');
+                    div.className = 'event-item';
+                    div.innerHTML = `
+                        <span>
+                            <strong>${event.name}</strong> 
+                            (Trọng số: ${event.weight})
+                        </span>
+                        <button onclick="App.removeEvent(${event.id})" style="background-color: #cc4a4a; padding: 3px 6px;">Xóa</button>
+                    `;
+                    listEl.appendChild(div);
+                });
+            },
+
+            /**
+             * Tính toán thời gian phân bổ và sắp xếp lịch tự động
+             */
+            calculateSchedule: function() {
+                const startStr = document.getElementById('overall-start').value;
+                const endStr = document.getElementById('overall-end').value;
+
+                if (!startStr || !endStr) {
+                    alert("Vui lòng nhập Ngày/Giờ Bắt đầu và Kết thúc Tổng thể.");
+                    return;
+                }
+
+                const startTime = new Date(startStr);
+                const endTime = new Date(endStr);
+                
+                if (startTime >= endTime) {
+                    alert("Ngày bắt đầu phải trước Ngày kết thúc.");
+                    return;
+                }
+
+                if (this.events.length === 0) {
+                    alert("Vui lòng thêm ít nhất một sự kiện.");
+                    return;
+                }
+
+                const totalDurationMs = endTime.getTime() - startTime.getTime();
+                const totalWeight = this.events.reduce((sum, e) => sum + e.weight, 0);
+
+                if (totalDurationMs <= 0 || totalWeight === 0) {
+                    this.clearPreview();
+                    document.getElementById('schedule-info').innerHTML = '<span class="error">Lỗi: Tổng thời gian hoặc tổng trọng số không hợp lệ.</span>';
+                    return;
+                }
+
+                // 1. Phân bổ thời gian dựa trên trọng số
+                const timePerUnitWeight = totalDurationMs / totalWeight;
+
+                this.events.forEach(event => {
+                    event.allocatedDurationMs = event.weight * timePerUnitWeight;
+                });
+
+                // 2. Sắp xếp: Ưu tiên sự kiện có trọng số cao nhất (Scheduled earlier)
+                // Cùng trọng số, ưu tiên cái nào được thêm vào trước (ID thấp hơn)
+                this.events.sort((a, b) => b.weight - a.weight || a.id - b.id); 
+
+                // 3. Xếp lịch tuần tự
+                let currentTime = startTime;
+                let currentTotalStudyDuration = 0; // Theo dõi thời gian học liên tục
+
+                this.events.forEach(event => {
+                    event.scheduledStart = new Date(currentTime.getTime());
+
+                    // Thời gian học thực tế (milliseconds)
+                    const durationMs = event.allocatedDurationMs;
+                    
+                    event.scheduledEnd = new Date(event.scheduledStart.getTime() + durationMs);
+
+                    currentTotalStudyDuration += durationMs;
+
+                    // Tính toán thời gian nghỉ (Break Time)
+                    let breakMs = durationMs * this.CONFIG.REST_RATIO;
+                    
+                    // Nếu tổng thời gian học vượt quá giới hạn (Ví dụ: 3 giờ = 180 phút), 
+                    // thêm thời gian nghỉ dài hơn (Ví dụ: 30 phút nghỉ tối thiểu)
+                    if (currentTotalStudyDuration / (1000 * 60) > this.CONFIG.MAX_SESSION_MINUTES) {
+                        breakMs = Math.max(breakMs, 30 * 60 * 1000); // Tối thiểu 30 phút nghỉ
+                        currentTotalStudyDuration = 0; // Reset session
+                    }
+
+                    // Sự kiện tiếp theo bắt đầu sau khi sự kiện hiện tại kết thúc + thời gian nghỉ
+                    currentTime = new Date(event.scheduledEnd.getTime() + breakMs);
+                });
+
+                this.renderSchedulePreview(totalDurationMs);
+            },
+            
+            clearPreview: function() {
+                 document.getElementById('preview-schedule').innerHTML = '';
+                 document.getElementById('schedule-info').innerHTML = '';
+            },
+
+            /**
+             * Hiển thị kết quả tính toán trên UI
+             */
+            renderSchedulePreview: function(totalDurationMs) {
+                const previewEl = document.getElementById('preview-schedule');
+                const infoEl = document.getElementById('schedule-info');
+                previewEl.innerHTML = '';
+
+                // Kiểm tra sự kiện có vượt quá thời gian tổng thể không
+                const lastEventEnd = this.events.length > 0 ? this.events[this.events.length - 1].scheduledEnd : null;
+                const overallEnd = new Date(document.getElementById('overall-end').value);
+                
+                if (lastEventEnd && lastEventEnd > overallEnd) {
+                    infoEl.innerHTML = `<span class="error">CẢNH BÁO: Lịch tràn qua thời gian kết thúc tổng thể! (${this.formatDateTime(lastEventEnd)})</span>`;
+                } else {
+                    const totalDays = Math.ceil(totalDurationMs / (1000 * 60 * 60 * 24));
+                    infoEl.innerHTML = `Đã xếp ${this.events.length} sự kiện trong khoảng ${totalDays} ngày.`;
+                }
+
+
+                this.events.forEach(event => {
+                    const durationMinutes = Math.round(event.allocatedDurationMs / (1000 * 60));
+
+                    const div = document.createElement('div');
+                    div.className = 'schedule-entry';
+                    div.innerHTML = `
+                        <strong>${event.name}</strong> (Trọng số: ${event.weight})<br>
+                        Thời gian phân bổ: ${this.formatDuration(durationMinutes)}<br>
+                        Bắt đầu: ${this.formatDateTime(event.scheduledStart)}<br>
+                        Kết thúc: ${this.formatDateTime(event.scheduledEnd)}
+                    `;
+                    previewEl.appendChild(div);
+                });
+            },
+
+            /**
+             * Định dạng thời gian cho UI
+             */
+            formatDateTime: function(date) {
+                if (!date) return 'N/A';
+                return date.toLocaleString('vi-VN', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false
+                });
+            },
+
+            /**
+             * Định dạng thời gian (phút -> giờ, phút)
+             */
+            formatDuration: function(minutes) {
+                if (minutes < 60) return `${minutes} phút`;
+                const hours = Math.floor(minutes / 60);
+                const remainingMinutes = minutes % 60;
+                return `${hours} giờ ${remainingMinutes} phút`;
+            },
+
+            /* --- ICS UTILITIES --- */
+
+            /**
+             * Định dạng Date object thành chuỗi thời gian chuẩn ICS (YYYYMMDDTHHMMSSZ)
+             */
+            formatICSDate: function(date) {
+                if (!date) return '';
+                // Chuyển sang UTC và loại bỏ dấu gạch ngang/dấu hai chấm
+                return date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, ''); 
+                // Thường các ứng dụng lịch thích Z (UTC time) hơn
+            },
+
+            /**
+             * Tạo và tải file ICS
+             */
+            downloadICS: function() {
+                if (this.events.length === 0 || !this.events[0].scheduledStart) {
+                    alert("Vui lòng Tính Toán Lịch trước khi tải file ICS.");
+                    return;
+                }
+
+                let icsContent = `BEGIN:VCALENDAR\n`;
+                icsContent += `VERSION:2.0\n`;
+                icsContent += `PRODID:-//ICS Scheduler Lo//NONSGML v1.0//EN\n`;
+
+                this.events.forEach(event => {
+                    const dtStart = this.formatICSDate(event.scheduledStart);
+                    const dtEnd = this.formatICSDate(event.scheduledEnd);
+                    const now = this.formatICSDate(new Date());
+
+                    icsContent += `BEGIN:VEVENT\n`;
+                    icsContent += `UID:${event.id}-${now}@coder-lo-scheduler.com\n`;
+                    icsContent += `DTSTAMP:${now}\n`;
+                    icsContent += `DTSTART:${dtStart}\n`;
+                    icsContent += `DTEND:${dtEnd}\n`;
+                    icsContent += `SUMMARY:${event.name} (T: ${event.weight})\n`;
+                    icsContent += `DESCRIPTION:Thời gian phân bổ dựa trên trọng số ${event.weight}.\n`;
+                    icsContent += `END:VEVENT\n`;
+                });
+
+                icsContent += `END:VCALENDAR\n`;
+
+                const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'schedule_lo.ics';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }
+        };
+        
+        // Khởi tạo
+        document.addEventListener('DOMContentLoaded', () => {
+            App.renderEventList();
+            
+            // Set giá trị mặc định cho dễ test (Ví dụ: 1 tuần làm việc)
+            const now = new Date();
+            const oneWeekLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+            // Hàm làm tròn giờ cho input datetime-local
+            const formatForInput = (date) => {
+                const y = date.getFullYear();
+                const m = String(date.getMonth() + 1).padStart(2, '0');
+                const d = String(date.getDate()).padStart(2, '0');
+                const h = String(date.getHours()).padStart(2, '0');
+                const min = String(date.getMinutes()).padStart(2, '0');
+                return `${y}-${m}-${d}T${h}:${min}`;
+            };
+            
+            document.getElementById('overall-start').value = formatForInput(now);
+            document.getElementById('overall-end').value = formatForInput(oneWeekLater);
+        });
+
+    </script>
+</body>
+</html>
