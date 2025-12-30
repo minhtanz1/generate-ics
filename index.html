@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Scheduler v2 // Leitner & Interleaving</title>
+    <title>Admin Scheduler v2.1 // Custom Descriptions</title>
     <style>
         :root {
             --bg-color: #1e1e1e;
@@ -11,8 +11,8 @@
             --input-bg: #3c3c3c;
             --text-color: #d4d4d4;
             --accent-color: #007acc;
-            --review-color: #c586c0; /* Pink for reviews */
-            --work-color: #4ec9b0;   /* Green for work */
+            --review-color: #c586c0; 
+            --work-color: #4ec9b0;   
             --border-color: #444;
             --font-mono: 'Consolas', 'Monaco', 'Courier New', monospace;
         }
@@ -30,7 +30,6 @@
         }
 
         h1, h3 { margin: 0 0 10px 0; font-weight: normal; color: var(--work-color); }
-        .badge-rev { color: var(--review-color); font-weight: bold; }
         
         .container {
             display: grid;
@@ -81,12 +80,35 @@
             line-height: 1.4;
         }
         
-        .log-entry { border-bottom: 1px dashed #333; padding: 2px 0; display: flex;}
-        .col-time { width: 140px; color: #569cd6; flex-shrink: 0;}
-        .col-type { width: 80px; text-align: center; margin-right: 10px; border-radius: 2px; font-size: 11px; padding: 1px;}
+        /* LOG STYLES */
+        .log-container { display: flex; flex-direction: column; border-bottom: 1px dashed #333; padding: 4px 0; }
+        .log-row { display: flex; align-items: center; }
+        .col-time { width: 130px; color: #569cd6; flex-shrink: 0;}
+        .col-type { width: 70px; text-align: center; margin-right: 10px; border-radius: 2px; font-size: 10px; padding: 1px;}
         .type-work { background: #0e3a3e; color: #4ec9b0; border: 1px solid #1a5c63; }
         .type-review { background: #3a1d36; color: #c586c0; border: 1px solid #632d5a; }
-        .col-msg { color: #d4d4d4; }
+        .col-msg { color: #d4d4d4; flex-grow: 1; }
+        
+        .btn-edit-desc {
+            background: none; border: none; color: #666; font-size: 11px; padding: 2px 5px; margin-left: 10px;
+        }
+        .btn-edit-desc:hover { color: var(--accent-color); background: #222; }
+
+        .desc-input-wrapper {
+            display: none; /* Hidden by default */
+            margin-left: 140px; /* Align with text */
+            margin-top: 4px;
+            margin-bottom: 4px;
+        }
+        .desc-input {
+            width: 90%;
+            background-color: #222;
+            border: 1px solid #444;
+            color: #ce9178; /* String color */
+            font-size: 11px;
+            padding: 4px;
+        }
+        .desc-input::placeholder { color: #555; font-style: italic; }
 
     </style>
 </head>
@@ -129,44 +151,36 @@
 
             <hr style="width:100%; border:0; border-top:1px solid var(--border-color);">
             
-            <button class="primary" onclick="App.generate()">>> GENERATE SMART SCHEDULE</button>
+            <button class="primary" onclick="App.generate()">>> GENERATE SCHEDULE</button>
             <button onclick="App.downloadICS()">Download .ICS</button>
         </div>
 
         <!-- RIGHT PANEL -->
         <div class="panel">
-            <h3>3. SYSTEM LOG / PREVIEW</h3>
+            <h3>3. PREVIEW & CUSTOMIZE</h3>
             <div id="previewConsole" class="preview-area">
-                // System ready.
-                // Interleaving Mode: Enabled
-                // Leitner Review: Enabled
+                // 1. Add Tasks on the left.
+                // 2. Click Generate.
+                // 3. Click [✎ Note] to add custom description if needed.
+                // 4. Download ICS.
             </div>
         </div>
     </div>
 
 <script>
-/**
- * ==========================================
- * CONFIG & CORE
- * ==========================================
- */
+/* ================= CORE CONFIG ================= */
 const CONFIG = {
     blockedHours: [
         { start: 23, end: 7 }, // Ngủ
         { start: 12, end: 13 }, // Ăn trưa
         { start: 18, end: 19 }  // Ăn tối
     ],
-    bufferMinutes: 5 // Thời gian nghỉ nhỏ giữa các chunk để chuyển context
+    bufferMinutes: 5 
 };
 
-/**
- * ==========================================
- * MODULE: TIME ENGINE
- * ==========================================
- */
+/* ================= TIME ENGINE ================= */
 class TimeManager {
     constructor() { this.blockedRanges = CONFIG.blockedHours; }
-
     isBlocked(date) {
         const h = date.getHours();
         for (let b of this.blockedRanges) {
@@ -175,14 +189,11 @@ class TimeManager {
         }
         return false;
     }
-
     getNextValidTime(date) {
         let d = new Date(date);
         while (this.isBlocked(d)) d.setMinutes(d.getMinutes() + 1);
         return d;
     }
-
-    // Tính toán thời gian khả dụng thực tế
     calculateAvailableMinutes(start, end) {
         let total = 0;
         let cur = new Date(start);
@@ -195,55 +206,39 @@ class TimeManager {
     }
 }
 
-/**
- * ==========================================
- * MODULE: SMART SCHEDULER (ALGORITHM)
- * ==========================================
- */
+/* ================= SMART SCHEDULER ================= */
 class SmartScheduler {
-    constructor() {
-        this.tm = new TimeManager();
-    }
-
+    constructor() { this.tm = new TimeManager(); }
     process(tasks, startStr, endStr, options) {
         const startDate = new Date(startStr);
         const endDate = new Date(endStr);
         const { chunkSize, reviewSize, interleaving, leitner } = options;
 
-        // 1. Validate & Prep
         const availableMins = this.tm.calculateAvailableMinutes(startDate, endDate);
         const totalWeight = tasks.reduce((sum, t) => sum + t.weight, 0);
         if (availableMins <= 0 || totalWeight === 0) throw new Error("Invalid time range or weights.");
 
-        // 2. Chuyển đổi Weight thành Block (Chunks)
-        // Chúng ta dành 80% thời gian cho Work, 20% dự phòng cho Review (nếu Leitner bật)
         const workableRatio = leitner ? 0.85 : 1.0; 
         const usableMinutes = availableMins * workableRatio;
 
-        let taskQueues = {}; // Lưu danh sách chunk cho từng task
+        let taskQueues = {}; 
 
         tasks.forEach(task => {
             const ratio = task.weight / totalWeight;
             const taskTotalMins = Math.floor(usableMinutes * ratio);
-            
-            // Số lượng chunk làm việc chính
-            let workCount = Math.floor(taskTotalMins / chunkSize);
-            if (workCount < 1) workCount = 1; // Tối thiểu 1 chunk
+            let workCount = Math.max(1, Math.floor(taskTotalMins / chunkSize));
 
             taskQueues[task.name] = [];
-
-            // Tạo Work Chunks
             for (let i = 0; i < workCount; i++) {
                 taskQueues[task.name].push({
                     type: 'WORK',
                     title: task.name,
                     duration: chunkSize,
-                    desc: `Deep Work Session (${i+1}/${workCount})`
+                    desc: `Deep Work Session (${i+1}/${workCount})`,
+                    customNote: '' // Init empty custom note
                 });
             }
 
-            // Tạo Review Chunks (Leitner Strategy)
-            // Logic: Cứ 3 work chunk thì thêm 1 review chunk. Hoặc tối thiểu 1 review nếu trọng số cao.
             if (leitner) {
                 const reviewCount = Math.max(1, Math.floor(workCount / 3)); 
                 for (let j = 0; j < reviewCount; j++) {
@@ -251,73 +246,45 @@ class SmartScheduler {
                         type: 'REVIEW',
                         title: `Review: ${task.name}`,
                         duration: reviewSize,
-                        desc: `Spaced Repetition Review`
+                        desc: `Spaced Repetition Review`,
+                        customNote: ''
                     });
                 }
             }
         });
 
-        // 3. Queue Merging & Interleaving Strategy
         let finalQueue = [];
-
         if (interleaving) {
-            // Round Robin: Lấy lần lượt từng task bỏ vào hàng đợi chung
-            // A1, B1, C1, A2, B2... -> Giúp não đổi context liên tục
             const names = Object.keys(taskQueues);
             let maxLen = Math.max(...names.map(n => taskQueues[n].length));
-
             for (let i = 0; i < maxLen; i++) {
                 names.forEach(name => {
-                    if (taskQueues[name][i]) {
-                        finalQueue.push(taskQueues[name][i]);
-                    }
+                    if (taskQueues[name][i]) finalQueue.push(taskQueues[name][i]);
                 });
             }
         } else {
-            // Blocked: Làm hết A rồi đến hết B
-            for (let name in taskQueues) {
-                finalQueue = finalQueue.concat(taskQueues[name]);
-            }
+            for (let name in taskQueues) finalQueue = finalQueue.concat(taskQueues[name]);
         }
 
-        // 4. Time Mapping (Gán thời gian thực cho Queue)
         let schedule = [];
         let cursor = this.tm.getNextValidTime(startDate);
 
         finalQueue.forEach(item => {
-            if (cursor >= endDate) return; // Hết giờ
-
-            // Tìm slot trống cho chunk này
+            if (cursor >= endDate) return;
             let slotStart = new Date(cursor);
             let slotEnd = new Date(cursor);
             let needed = item.duration;
-
-            // Kiểm tra xem duration này có bị dính vào giờ chặn không
-            // Để đơn giản cho admin dashboard: Nếu dính giờ chặn, đẩy hẳn sang sau giờ chặn
-            // (Không chia cắt 1 chunk 45p thành 2 mảnh nhỏ, vì Deep Work cần liền mạch)
-            
             let fits = false;
-            while(!fits && slotStart < endDate) {
-                // Giả lập cộng thời gian
-                let tempCursor = new Date(slotStart);
-                let validMinsFound = 0;
-                let isInterrupted = false;
 
+            while(!fits && slotStart < endDate) {
+                let tempCursor = new Date(slotStart);
+                let isInterrupted = false;
                 for(let m=0; m<needed; m++) {
-                    if(this.tm.isBlocked(tempCursor)) {
-                        isInterrupted = true;
-                        break;
-                    }
+                    if(this.tm.isBlocked(tempCursor)) { isInterrupted = true; break; }
                     tempCursor.setMinutes(tempCursor.getMinutes() + 1);
                 }
-
-                if(!isInterrupted) {
-                    slotEnd = tempCursor;
-                    fits = true;
-                } else {
-                    // Nếu bị chặn, nhảy cursor tới vùng valid tiếp theo
-                    slotStart = this.tm.getNextValidTime(tempCursor);
-                }
+                if(!isInterrupted) { slotEnd = tempCursor; fits = true; } 
+                else { slotStart = this.tm.getNextValidTime(tempCursor); }
             }
 
             if (fits && slotEnd <= endDate) {
@@ -326,33 +293,34 @@ class SmartScheduler {
                     type: item.type,
                     start: new Date(slotStart),
                     end: new Date(slotEnd),
-                    description: item.desc
+                    description: item.desc,
+                    customNote: ''
                 });
-
-                // Cập nhật cursor thật + buffer
                 cursor = new Date(slotEnd);
                 cursor.setMinutes(cursor.getMinutes() + CONFIG.bufferMinutes);
                 cursor = this.tm.getNextValidTime(cursor);
             }
         });
-
         return schedule;
     }
 }
 
-/**
- * ==========================================
- * MODULE: ICS GEN
- * ==========================================
- */
+/* ================= ICS GENERATOR ================= */
 class ICSGenerator {
     static generate(events) {
         let c = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//CoderLo//LeitnerSched//EN\r\n";
         events.forEach(e => {
+            // Combine system desc and custom note
+            let finalDesc = e.description;
+            if (e.customNote && e.customNote.trim() !== "") {
+                finalDesc += ` \\n------------------\\nNOTE: ${e.customNote}`;
+            }
+
             c += "BEGIN:VEVENT\r\n";
             c += `DTSTART:${this.fmt(e.start)}\r\nDTEND:${this.fmt(e.end)}\r\n`;
             c += `SUMMARY:${e.type === 'REVIEW' ? '🔄 ' : '⚡ '}${e.title}\r\n`;
-            c += `DESCRIPTION:${e.description}\r\nEND:VEVENT\r\n`;
+            c += `DESCRIPTION:${finalDesc}\r\n`;
+            c += "END:VEVENT\r\n";
         });
         c += "END:VCALENDAR";
         return c;
@@ -363,11 +331,7 @@ class ICSGenerator {
     }
 }
 
-/**
- * ==========================================
- * UI CONTROLLER
- * ==========================================
- */
+/* ================= UI CONTROLLER ================= */
 const UI = {
     init() {
         const now = new Date();
@@ -376,7 +340,6 @@ const UI = {
         document.getElementById('globalEnd').value = nextW.toISOString().slice(0, 16);
         this.addTaskRow("Learn React Hooks", 20);
         this.addTaskRow("System Design", 10);
-        this.addTaskRow("Gym / Workout", 15);
     },
 
     addTaskRow(n="", w="") {
@@ -394,27 +357,47 @@ const UI = {
         })).filter(t => t.name);
     },
 
-    log(evt) {
+    toggleDescInput(idx) {
+        const wrapper = document.getElementById(`desc-wrapper-${idx}`);
+        const input = document.getElementById(`desc-input-${idx}`);
+        if (wrapper.style.display === 'block') {
+            wrapper.style.display = 'none';
+        } else {
+            wrapper.style.display = 'block';
+            input.focus();
+        }
+    },
+
+    log(evt, idx) {
         const consoleDiv = document.getElementById('previewConsole');
-        const d = document.createElement('div');
-        d.className = 'log-entry';
         
         const timeStr = `${evt.start.getDate()}/${evt.start.getMonth()+1} [${evt.start.getHours()}:${(evt.start.getMinutes()<10?'0':'')+evt.start.getMinutes()}]`;
         const typeClass = evt.type === 'WORK' ? 'type-work' : 'type-review';
         
-        d.innerHTML = `<div class="col-time">${timeStr}</div>
-                       <div class="col-type ${typeClass}">${evt.type}</div>
-                       <div class="col-msg">${evt.title}</div>`;
-        consoleDiv.appendChild(d);
-        consoleDiv.scrollTop = consoleDiv.scrollHeight;
+        const wrapper = document.createElement('div');
+        wrapper.className = 'log-container';
+
+        // Main info row
+        wrapper.innerHTML = `
+            <div class="log-row">
+                <div class="col-time">${timeStr}</div>
+                <div class="col-type ${typeClass}">${evt.type}</div>
+                <div class="col-msg">${evt.title}</div>
+                <button class="btn-edit-desc" onclick="UI.toggleDescInput(${idx})">[✎ Note]</button>
+            </div>
+            <div class="desc-input-wrapper" id="desc-wrapper-${idx}">
+                <input type="text" class="desc-input" id="desc-input-${idx}" 
+                    placeholder="> Enter custom description here (optional)..." 
+                    oninput="App.updateEventDesc(${idx}, this.value)"
+                    value="${evt.customNote || ''}">
+            </div>
+        `;
+        
+        consoleDiv.appendChild(wrapper);
     }
 };
 
-/**
- * ==========================================
- * APP MAIN
- * ==========================================
- */
+/* ================= APP MAIN ================= */
 const App = {
     events: [],
     
@@ -436,16 +419,22 @@ const App = {
             const scheduler = new SmartScheduler();
             this.events = scheduler.process(tasks, start, end, opts);
 
-            // Log Stats
             const d = document.createElement('div');
             d.style.color = '#888'; d.style.borderBottom = '1px solid #333'; d.style.marginBottom='10px';
-            d.innerText = `// Generated ${this.events.length} blocks. Interleaving: ${opts.interleaving}, Leitner: ${opts.leitner}`;
+            d.innerText = `// Generated ${this.events.length} blocks. Config: Interleaving=${opts.interleaving}, Leitner=${opts.leitner}`;
             con.appendChild(d);
 
-            this.events.forEach(UI.log);
+            // Pass index to UI.log to bind inputs
+            this.events.forEach((evt, idx) => UI.log(evt, idx));
             
         } catch(e) {
             con.innerText = `[ERROR] ${e.message}`;
+        }
+    },
+
+    updateEventDesc(idx, val) {
+        if(this.events[idx]) {
+            this.events[idx].customNote = val;
         }
     },
 
