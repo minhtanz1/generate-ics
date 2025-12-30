@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Task Scheduler // Auto-ICS</title>
+    <title>Admin Scheduler v2 // Leitner & Interleaving</title>
     <style>
         :root {
             --bg-color: #1e1e1e;
@@ -11,7 +11,8 @@
             --input-bg: #3c3c3c;
             --text-color: #d4d4d4;
             --accent-color: #007acc;
-            --success-color: #4ec9b0;
+            --review-color: #c586c0; /* Pink for reviews */
+            --work-color: #4ec9b0;   /* Green for work */
             --border-color: #444;
             --font-mono: 'Consolas', 'Monaco', 'Courier New', monospace;
         }
@@ -25,10 +26,11 @@
             display: flex;
             flex-direction: column;
             gap: 20px;
-            font-size: 14px;
+            font-size: 13px;
         }
 
-        h1, h3 { margin: 0 0 10px 0; font-weight: normal; color: var(--success-color); }
+        h1, h3 { margin: 0 0 10px 0; font-weight: normal; color: var(--work-color); }
+        .badge-rev { color: var(--review-color); font-weight: bold; }
         
         .container {
             display: grid;
@@ -43,19 +45,16 @@
             padding: 15px;
             display: flex;
             flex-direction: column;
-            gap: 15px;
+            gap: 12px;
             overflow-y: auto;
         }
 
-        .form-group {
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
-        }
+        .form-group { display: flex; flex-direction: column; gap: 5px; }
+        .checkbox-group { display: flex; align-items: center; gap: 10px; margin-top:5px; }
+        
+        label { font-size: 11px; opacity: 0.7; text-transform: uppercase; letter-spacing: 0.5px;}
 
-        label { font-size: 12px; opacity: 0.8; }
-
-        input, button {
+        input[type="text"], input[type="number"], input[type="datetime-local"], button {
             background-color: var(--input-bg);
             border: 1px solid var(--border-color);
             color: var(--text-color);
@@ -64,90 +63,83 @@
             outline: none;
         }
 
-        input:focus { border-color: var(--accent-color); }
-
-        button {
-            cursor: pointer;
-            transition: background 0.2s;
-            font-weight: bold;
-        }
-
+        button { cursor: pointer; transition: background 0.2s; font-weight: bold; }
         button:hover { background-color: #505050; }
         button.primary { background-color: var(--accent-color); color: white; border: none; }
-        button.primary:hover { background-color: #0062a3; }
-        button.delete-btn { background-color: #ce4646; color: white; border: none; width: 30px;}
-
-        .task-list {
-            border-top: 1px solid var(--border-color);
-            margin-top: 10px;
-            padding-top: 10px;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-
-        .task-item {
-            display: grid;
-            grid-template-columns: 1fr 60px 30px;
-            gap: 5px;
-            align-items: center;
-        }
+        
+        .task-list { border-top: 1px solid var(--border-color); margin-top: 10px; padding-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+        .task-item { display: grid; grid-template-columns: 1fr 50px 30px; gap: 5px; align-items: center; }
 
         .preview-area {
             background-color: #111;
             padding: 10px;
             border: 1px solid var(--border-color);
-            font-size: 13px;
             white-space: pre-wrap;
             overflow-y: auto;
             flex-grow: 1;
-            color: #ce9178; /* String color style */
+            font-size: 12px;
+            line-height: 1.4;
         }
-
-        .log-entry { margin-bottom: 5px; border-bottom: 1px dashed #333; padding-bottom: 2px;}
-        .log-time { color: #569cd6; }
-        .log-task { color: #dcdcaa; }
+        
+        .log-entry { border-bottom: 1px dashed #333; padding: 2px 0; display: flex;}
+        .col-time { width: 140px; color: #569cd6; flex-shrink: 0;}
+        .col-type { width: 80px; text-align: center; margin-right: 10px; border-radius: 2px; font-size: 11px; padding: 1px;}
+        .type-work { background: #0e3a3e; color: #4ec9b0; border: 1px solid #1a5c63; }
+        .type-review { background: #3a1d36; color: #c586c0; border: 1px solid #632d5a; }
+        .col-msg { color: #d4d4d4; }
 
     </style>
 </head>
 <body>
 
-    <h1>// DASHBOARD: SCHEDULER & ICS GENERATOR</h1>
+    <h1>// SCHEDULER: LEITNER & INTERLEAVING MODE</h1>
 
     <div class="container">
-        <!-- LEFT PANEL: CONFIG & INPUTS -->
+        <!-- LEFT PANEL -->
         <div class="panel">
             <h3>1. GLOBAL CONFIG</h3>
             <div class="form-group">
-                <label>Project Start (Ngày bắt đầu)</label>
+                <label>Start / End Date</label>
                 <input type="datetime-local" id="globalStart">
-            </div>
-            <div class="form-group">
-                <label>Project End (Ngày kết thúc)</label>
-                <input type="datetime-local" id="globalEnd">
+                <input type="datetime-local" id="globalEnd" style="margin-top:5px">
             </div>
             
+            <div class="form-group">
+                <label>Deep Work Config (Minutes)</label>
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:5px">
+                    <input type="number" id="chunkSize" value="45" title="Work Chunk Duration">
+                    <input type="number" id="reviewSize" value="15" title="Review Chunk Duration">
+                </div>
+            </div>
+
+            <div class="checkbox-group">
+                <input type="checkbox" id="useInterleaving" checked>
+                <label for="useInterleaving" style="color:white; opacity:1">Enable Interleaving (Shuffle)</label>
+            </div>
+            <div class="checkbox-group">
+                <input type="checkbox" id="useLeitner" checked>
+                <label for="useLeitner" style="color:var(--review-color); opacity:1">Enable Leitner Review</label>
+            </div>
+
             <hr style="width:100%; border:0; border-top:1px solid var(--border-color);">
 
-            <h3>2. TASKS & WEIGHTS</h3>
-            <div class="task-list" id="taskList">
-                <!-- Task items will be injected here -->
-            </div>
+            <h3>2. TASKS & PRIORITY</h3>
+            <div class="task-list" id="taskList"></div>
             <button onclick="UI.addTaskRow()">+ Add Task</button>
 
             <hr style="width:100%; border:0; border-top:1px solid var(--border-color);">
             
-            <h3>3. ACTIONS</h3>
-            <button class="primary" onclick="App.generate()">>> CALCULATE & PREVIEW</button>
-            <button onclick="App.downloadICS()">Download .ICS File</button>
+            <button class="primary" onclick="App.generate()">>> GENERATE SMART SCHEDULE</button>
+            <button onclick="App.downloadICS()">Download .ICS</button>
         </div>
 
-        <!-- RIGHT PANEL: PREVIEW -->
+        <!-- RIGHT PANEL -->
         <div class="panel">
-            <h3>4. SYSTEM LOG / PREVIEW</h3>
+            <h3>3. SYSTEM LOG / PREVIEW</h3>
             <div id="previewConsole" class="preview-area">
-                // Ready to process...
-                // Waiting for inputs...
+                // System ready.
+                // Interleaving Mode: Enabled
+                // Leitner Review: Enabled
             </div>
         </div>
     </div>
@@ -155,150 +147,192 @@
 <script>
 /**
  * ==========================================
- * CORE CONFIGURATION (OPEN SYSTEM)
+ * CONFIG & CORE
  * ==========================================
- * Điều chỉnh các thông số mặc định tại đây
  */
 const CONFIG = {
-    // Các khung giờ "Blocked" (không làm việc). Format: [StartHour, EndHour]
-    // Ví dụ: [23, 7] nghĩa là từ 23h đêm đến 7h sáng hôm sau.
-    // [12, 13] nghĩa là từ 12h trưa đến 13h chiều.
     blockedHours: [
-        { start: 23, end: 7 }, // Sleep
-        { start: 12, end: 13 }, // Lunch
-        { start: 18, end: 19 }  // Dinner
+        { start: 23, end: 7 }, // Ngủ
+        { start: 12, end: 13 }, // Ăn trưa
+        { start: 18, end: 19 }  // Ăn tối
     ],
-    minBlockDuration: 30, // Đơn vị phút. Sự kiện ngắn nhất.
-    bufferMinutes: 10,    // Thời gian nghỉ giữa các sự kiện (Time Management)
+    bufferMinutes: 5 // Thời gian nghỉ nhỏ giữa các chunk để chuyển context
 };
 
 /**
  * ==========================================
- * LOGIC MODULE: TIME MANAGEMENT
+ * MODULE: TIME ENGINE
  * ==========================================
  */
 class TimeManager {
-    constructor() {
-        this.blockedRanges = CONFIG.blockedHours;
-    }
+    constructor() { this.blockedRanges = CONFIG.blockedHours; }
 
-    // Kiểm tra xem một thời điểm cụ thể có nằm trong giờ nghỉ không
     isBlocked(date) {
-        const hour = date.getHours();
-        const minute = date.getMinutes();
-        
-        for (let block of this.blockedRanges) {
-            // Xử lý trường hợp qua đêm (ví dụ 23h -> 7h)
-            if (block.start > block.end) {
-                if (hour >= block.start || hour < block.end) return true;
-            } else {
-                // Xử lý trong ngày (ví dụ 12h -> 13h)
-                if (hour >= block.start && hour < block.end) return true;
-            }
+        const h = date.getHours();
+        for (let b of this.blockedRanges) {
+            if (b.start > b.end) { if (h >= b.start || h < b.end) return true; }
+            else { if (h >= b.start && h < b.end) return true; }
         }
         return false;
     }
 
-    // Tìm thời điểm bắt đầu hợp lệ tiếp theo (nếu đang rơi vào giờ nghỉ)
     getNextValidTime(date) {
-        let checkDate = new Date(date);
-        // Loop từng phút để thoát khỏi vùng blocked (giải thuật đơn giản cho dashboard nhỏ)
-        // Có thể tối ưu bằng toán học nếu scale lớn, nhưng loop phút an toàn cho logic phức tạp
-        while (this.isBlocked(checkDate)) {
-            checkDate.setMinutes(checkDate.getMinutes() + 1);
-        }
-        return checkDate;
+        let d = new Date(date);
+        while (this.isBlocked(d)) d.setMinutes(d.getMinutes() + 1);
+        return d;
     }
 
-    // Tính tổng số phút làm việc khả dụng giữa 2 mốc thời gian
+    // Tính toán thời gian khả dụng thực tế
     calculateAvailableMinutes(start, end) {
-        let totalMinutes = 0;
-        let cursor = new Date(start);
-        const endDate = new Date(end);
-
-        while (cursor < endDate) {
-            if (!this.isBlocked(cursor)) {
-                totalMinutes++;
-            }
-            cursor.setMinutes(cursor.getMinutes() + 1);
+        let total = 0;
+        let cur = new Date(start);
+        const e = new Date(end);
+        while (cur < e) {
+            if (!this.isBlocked(cur)) total++;
+            cur.setMinutes(cur.getMinutes() + 1);
         }
-        return totalMinutes;
+        return total;
     }
 }
 
 /**
  * ==========================================
- * LOGIC MODULE: SCHEDULER
+ * MODULE: SMART SCHEDULER (ALGORITHM)
  * ==========================================
  */
-class Scheduler {
+class SmartScheduler {
     constructor() {
         this.tm = new TimeManager();
     }
 
-    process(tasks, globalStart, globalEnd) {
-        const startDate = new Date(globalStart);
-        const endDate = new Date(globalEnd);
+    process(tasks, startStr, endStr, options) {
+        const startDate = new Date(startStr);
+        const endDate = new Date(endStr);
+        const { chunkSize, reviewSize, interleaving, leitner } = options;
 
-        if (startDate >= endDate) throw new Error("Start Date must be before End Date");
-        if (tasks.length === 0) throw new Error("No tasks defined");
+        // 1. Validate & Prep
+        const availableMins = this.tm.calculateAvailableMinutes(startDate, endDate);
+        const totalWeight = tasks.reduce((sum, t) => sum + t.weight, 0);
+        if (availableMins <= 0 || totalWeight === 0) throw new Error("Invalid time range or weights.");
 
-        // 1. Tính tổng trọng số
-        const totalWeight = tasks.reduce((sum, t) => sum + parseInt(t.weight), 0);
-        
-        // 2. Tính tổng thời gian làm việc khả dụng (phút)
-        const totalAvailableMinutes = this.tm.calculateAvailableMinutes(startDate, endDate);
-        
-        if (totalAvailableMinutes <= 0) throw new Error("No working hours available in selected range");
+        // 2. Chuyển đổi Weight thành Block (Chunks)
+        // Chúng ta dành 80% thời gian cho Work, 20% dự phòng cho Review (nếu Leitner bật)
+        const workableRatio = leitner ? 0.85 : 1.0; 
+        const usableMinutes = availableMins * workableRatio;
 
-        // 3. Phân bổ thời gian
-        let schedule = [];
-        let currentCursor = this.tm.getNextValidTime(startDate);
+        let taskQueues = {}; // Lưu danh sách chunk cho từng task
 
         tasks.forEach(task => {
-            // Thời gian dành cho task này (tỉ lệ thuận với trọng số)
-            // Trừ đi buffer cho mỗi task để dãn cách
-            const ratio = parseInt(task.weight) / totalWeight;
-            let allocatedMinutes = Math.floor(totalAvailableMinutes * ratio);
+            const ratio = task.weight / totalWeight;
+            const taskTotalMins = Math.floor(usableMinutes * ratio);
             
-            // Xếp task vào lịch
-            // Logic: Cố gắng xếp liên tục, nhưng nếu gặp block (ngủ) thì nhảy qua
-            
-            let remainingMinutes = allocatedMinutes;
-            let segmentStart = new Date(currentCursor);
-            
-            // Chia nhỏ task nếu bị ngắt quãng bởi giờ ngủ
-            while (remainingMinutes > 0) {
-                // Nếu vượt quá globalEnd thì dừng
-                if (currentCursor >= endDate) break;
+            // Số lượng chunk làm việc chính
+            let workCount = Math.floor(taskTotalMins / chunkSize);
+            if (workCount < 1) workCount = 1; // Tối thiểu 1 chunk
 
-                // Tìm khoảng làm việc liên tục tiếp theo
-                if (this.tm.isBlocked(currentCursor)) {
-                    // Nếu đang ở vùng block, đẩy cursor ra
-                    currentCursor = this.tm.getNextValidTime(currentCursor);
-                    segmentStart = new Date(currentCursor); // Reset start segment
-                }
+            taskQueues[task.name] = [];
 
-                // Tiến 1 phút
-                currentCursor.setMinutes(currentCursor.getMinutes() + 1);
-                remainingMinutes--;
+            // Tạo Work Chunks
+            for (let i = 0; i < workCount; i++) {
+                taskQueues[task.name].push({
+                    type: 'WORK',
+                    title: task.name,
+                    duration: chunkSize,
+                    desc: `Deep Work Session (${i+1}/${workCount})`
+                });
+            }
 
-                // Nếu phút tiếp theo là block HOẶC hết giờ allocated -> đóng segment
-                if (remainingMinutes === 0 || this.tm.isBlocked(currentCursor)) {
-                    schedule.push({
-                        title: task.name,
-                        start: new Date(segmentStart),
-                        end: new Date(currentCursor),
-                        description: `Weight: ${task.weight} | Allocated based on priority.`
+            // Tạo Review Chunks (Leitner Strategy)
+            // Logic: Cứ 3 work chunk thì thêm 1 review chunk. Hoặc tối thiểu 1 review nếu trọng số cao.
+            if (leitner) {
+                const reviewCount = Math.max(1, Math.floor(workCount / 3)); 
+                for (let j = 0; j < reviewCount; j++) {
+                    taskQueues[task.name].push({
+                        type: 'REVIEW',
+                        title: `Review: ${task.name}`,
+                        duration: reviewSize,
+                        desc: `Spaced Repetition Review`
                     });
-                    
-                    // Thêm buffer time (nghỉ ngơi) sau khi hoàn thành 1 segment hoặc 1 task
-                    if (CONFIG.bufferMinutes > 0 && remainingMinutes === 0) {
-                        currentCursor.setMinutes(currentCursor.getMinutes() + CONFIG.bufferMinutes);
-                        // Đảm bảo buffer không đẩy vào giờ ngủ (nếu có thì vòng lặp sau sẽ xử lý)
-                        currentCursor = this.tm.getNextValidTime(currentCursor);
-                    }
                 }
+            }
+        });
+
+        // 3. Queue Merging & Interleaving Strategy
+        let finalQueue = [];
+
+        if (interleaving) {
+            // Round Robin: Lấy lần lượt từng task bỏ vào hàng đợi chung
+            // A1, B1, C1, A2, B2... -> Giúp não đổi context liên tục
+            const names = Object.keys(taskQueues);
+            let maxLen = Math.max(...names.map(n => taskQueues[n].length));
+
+            for (let i = 0; i < maxLen; i++) {
+                names.forEach(name => {
+                    if (taskQueues[name][i]) {
+                        finalQueue.push(taskQueues[name][i]);
+                    }
+                });
+            }
+        } else {
+            // Blocked: Làm hết A rồi đến hết B
+            for (let name in taskQueues) {
+                finalQueue = finalQueue.concat(taskQueues[name]);
+            }
+        }
+
+        // 4. Time Mapping (Gán thời gian thực cho Queue)
+        let schedule = [];
+        let cursor = this.tm.getNextValidTime(startDate);
+
+        finalQueue.forEach(item => {
+            if (cursor >= endDate) return; // Hết giờ
+
+            // Tìm slot trống cho chunk này
+            let slotStart = new Date(cursor);
+            let slotEnd = new Date(cursor);
+            let needed = item.duration;
+
+            // Kiểm tra xem duration này có bị dính vào giờ chặn không
+            // Để đơn giản cho admin dashboard: Nếu dính giờ chặn, đẩy hẳn sang sau giờ chặn
+            // (Không chia cắt 1 chunk 45p thành 2 mảnh nhỏ, vì Deep Work cần liền mạch)
+            
+            let fits = false;
+            while(!fits && slotStart < endDate) {
+                // Giả lập cộng thời gian
+                let tempCursor = new Date(slotStart);
+                let validMinsFound = 0;
+                let isInterrupted = false;
+
+                for(let m=0; m<needed; m++) {
+                    if(this.tm.isBlocked(tempCursor)) {
+                        isInterrupted = true;
+                        break;
+                    }
+                    tempCursor.setMinutes(tempCursor.getMinutes() + 1);
+                }
+
+                if(!isInterrupted) {
+                    slotEnd = tempCursor;
+                    fits = true;
+                } else {
+                    // Nếu bị chặn, nhảy cursor tới vùng valid tiếp theo
+                    slotStart = this.tm.getNextValidTime(tempCursor);
+                }
+            }
+
+            if (fits && slotEnd <= endDate) {
+                schedule.push({
+                    title: item.title,
+                    type: item.type,
+                    start: new Date(slotStart),
+                    end: new Date(slotEnd),
+                    description: item.desc
+                });
+
+                // Cập nhật cursor thật + buffer
+                cursor = new Date(slotEnd);
+                cursor.setMinutes(cursor.getMinutes() + CONFIG.bufferMinutes);
+                cursor = this.tm.getNextValidTime(cursor);
             }
         });
 
@@ -308,169 +342,123 @@ class Scheduler {
 
 /**
  * ==========================================
- * MODULE: ICS GENERATOR
+ * MODULE: ICS GEN
  * ==========================================
  */
 class ICSGenerator {
     static generate(events) {
-        let icsContent = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//CoderLo//AdminDashboard//EN\r\n";
-        
-        events.forEach(event => {
-            icsContent += "BEGIN:VEVENT\r\n";
-            icsContent += `DTSTART:${this.formatDate(event.start)}\r\n`;
-            icsContent += `DTEND:${this.formatDate(event.end)}\r\n`;
-            icsContent += `SUMMARY:${event.title}\r\n`;
-            icsContent += `DESCRIPTION:${event.description}\r\n`;
-            icsContent += "END:VEVENT\r\n";
+        let c = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//CoderLo//LeitnerSched//EN\r\n";
+        events.forEach(e => {
+            c += "BEGIN:VEVENT\r\n";
+            c += `DTSTART:${this.fmt(e.start)}\r\nDTEND:${this.fmt(e.end)}\r\n`;
+            c += `SUMMARY:${e.type === 'REVIEW' ? '🔄 ' : '⚡ '}${e.title}\r\n`;
+            c += `DESCRIPTION:${e.description}\r\nEND:VEVENT\r\n`;
         });
-
-        icsContent += "END:VCALENDAR";
-        return icsContent;
+        c += "END:VCALENDAR";
+        return c;
     }
-
-    static formatDate(date) {
-        // Format: YYYYMMDDTHHmmssZ (UTC) or local. Let's use local format string YYYYMMDDTHHmmss
-        const pad = (n) => n < 10 ? '0' + n : n;
-        return date.getFullYear() +
-            pad(date.getMonth() + 1) +
-            pad(date.getDate()) + 'T' +
-            pad(date.getHours()) +
-            pad(date.getMinutes()) +
-            pad(date.getSeconds());
+    static fmt(d) {
+        const p = n => n < 10 ? '0' + n : n;
+        return d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+'T'+p(d.getHours())+p(d.getMinutes())+'00';
     }
 }
 
 /**
  * ==========================================
- * MODULE: UI HANDLER
+ * UI CONTROLLER
  * ==========================================
  */
 const UI = {
-    taskList: document.getElementById('taskList'),
-    previewConsole: document.getElementById('previewConsole'),
-
     init() {
-        // Set default dates
         const now = new Date();
-        const tomorrow = new Date(now);
-        tomorrow.setDate(tomorrow.getDate() + 7);
-        
+        const nextW = new Date(now); nextW.setDate(nextW.getDate() + 5);
         document.getElementById('globalStart').value = now.toISOString().slice(0, 16);
-        document.getElementById('globalEnd').value = tomorrow.toISOString().slice(0, 16);
-
-        // Add 2 default tasks
-        this.addTaskRow("Research Architecture", 10);
-        this.addTaskRow("Code Backend", 20);
+        document.getElementById('globalEnd').value = nextW.toISOString().slice(0, 16);
+        this.addTaskRow("Learn React Hooks", 20);
+        this.addTaskRow("System Design", 10);
+        this.addTaskRow("Gym / Workout", 15);
     },
 
-    addTaskRow(name = "", weight = "") {
-        const div = document.createElement('div');
-        div.className = 'task-item';
-        div.innerHTML = `
-            <input type="text" placeholder="Event Name (e.g. Code feature A)" value="${name}" class="t-name">
-            <input type="number" placeholder="W" value="${weight}" class="t-weight" min="1">
-            <button class="delete-btn" onclick="this.parentElement.remove()">x</button>
-        `;
-        this.taskList.appendChild(div);
+    addTaskRow(n="", w="") {
+        const d = document.createElement('div'); d.className = 'task-item';
+        d.innerHTML = `<input type="text" class="t-name" value="${n}" placeholder="Task Name">
+                       <input type="number" class="t-weight" value="${w}" placeholder="W">
+                       <button class="delete-btn" onclick="this.parentElement.remove()" style="background:#ce4646;color:white;border:none">x</button>`;
+        document.getElementById('taskList').appendChild(d);
     },
 
     getTasks() {
-        const rows = document.querySelectorAll('.task-item');
-        let tasks = [];
-        rows.forEach(row => {
-            const name = row.querySelector('.t-name').value;
-            const weight = row.querySelector('.t-weight').value;
-            if (name && weight) {
-                tasks.push({ name, weight: parseInt(weight) });
-            }
-        });
-        return tasks;
+        return Array.from(document.querySelectorAll('.task-item')).map(r => ({
+            name: r.querySelector('.t-name').value,
+            weight: parseInt(r.querySelector('.t-weight').value || 1)
+        })).filter(t => t.name);
     },
 
-    log(msg, type = 'info') {
-        const line = document.createElement('div');
-        line.className = 'log-entry';
-        line.innerHTML = msg;
-        this.previewConsole.appendChild(line);
-        this.previewConsole.scrollTop = this.previewConsole.scrollHeight;
-    },
-
-    clearLog() {
-        this.previewConsole.innerHTML = '';
+    log(evt) {
+        const consoleDiv = document.getElementById('previewConsole');
+        const d = document.createElement('div');
+        d.className = 'log-entry';
+        
+        const timeStr = `${evt.start.getDate()}/${evt.start.getMonth()+1} [${evt.start.getHours()}:${(evt.start.getMinutes()<10?'0':'')+evt.start.getMinutes()}]`;
+        const typeClass = evt.type === 'WORK' ? 'type-work' : 'type-review';
+        
+        d.innerHTML = `<div class="col-time">${timeStr}</div>
+                       <div class="col-type ${typeClass}">${evt.type}</div>
+                       <div class="col-msg">${evt.title}</div>`;
+        consoleDiv.appendChild(d);
+        consoleDiv.scrollTop = consoleDiv.scrollHeight;
     }
 };
 
 /**
  * ==========================================
- * MAIN APP CONTROLLER
+ * APP MAIN
  * ==========================================
  */
 const App = {
-    scheduledEvents: [],
-
+    events: [],
+    
     generate() {
-        UI.clearLog();
-        UI.log("// Starting calculation...", 'info');
-
-        const startStr = document.getElementById('globalStart').value;
-        const endStr = document.getElementById('globalEnd').value;
+        const con = document.getElementById('previewConsole');
+        con.innerHTML = ''; 
+        
         const tasks = UI.getTasks();
-
-        if (!startStr || !endStr) {
-            UI.log("[ERROR] Please select start and end dates.", 'error');
-            return;
-        }
+        const start = document.getElementById('globalStart').value;
+        const end = document.getElementById('globalEnd').value;
+        const opts = {
+            chunkSize: parseInt(document.getElementById('chunkSize').value),
+            reviewSize: parseInt(document.getElementById('reviewSize').value),
+            interleaving: document.getElementById('useInterleaving').checked,
+            leitner: document.getElementById('useLeitner').checked
+        };
 
         try {
-            const scheduler = new Scheduler();
-            this.scheduledEvents = scheduler.process(tasks, startStr, endStr);
+            const scheduler = new SmartScheduler();
+            this.events = scheduler.process(tasks, start, end, opts);
 
-            UI.log(`// Found ${tasks.length} tasks. Total generated slots: ${this.scheduledEvents.length}`);
-            UI.log(`// ---------------------------------------------------`);
+            // Log Stats
+            const d = document.createElement('div');
+            d.style.color = '#888'; d.style.borderBottom = '1px solid #333'; d.style.marginBottom='10px';
+            d.innerText = `// Generated ${this.events.length} blocks. Interleaving: ${opts.interleaving}, Leitner: ${opts.leitner}`;
+            con.appendChild(d);
 
-            this.scheduledEvents.forEach(evt => {
-                const timeStr = `[${this.formatTime(evt.start)} - ${this.formatTime(evt.end)}]`;
-                const dateStr = evt.start.toLocaleDateString();
-                UI.log(`<span class="log-time">${dateStr} ${timeStr}</span> : <span class="log-task">${evt.title}</span>`);
-            });
+            this.events.forEach(UI.log);
             
-            UI.log(`// ---------------------------------------------------`);
-            UI.log(`// CONFIG: Sleep [${CONFIG.blockedHours[0].start}h-${CONFIG.blockedHours[0].end}h], Buffer: ${CONFIG.bufferMinutes}m`);
-            UI.log(`// Ready to download.`);
-
-        } catch (e) {
-            UI.log(`[EXCEPTION] ${e.message}`);
-            console.error(e);
+        } catch(e) {
+            con.innerText = `[ERROR] ${e.message}`;
         }
-    },
-
-    formatTime(date) {
-        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     },
 
     downloadICS() {
-        if (this.scheduledEvents.length === 0) {
-            alert("Please generate the schedule first!");
-            return;
-        }
-
-        const content = ICSGenerator.generate(this.scheduledEvents);
-        const blob = new Blob([content], { type: 'text/calendar' });
-        const url = URL.createObjectURL(blob);
-        
+        if(!this.events.length) return alert("Generate first!");
         const a = document.createElement('a');
-        a.href = url;
-        a.download = 'admin_schedule.ics';
-        document.body.appendChild(a);
+        a.href = URL.createObjectURL(new Blob([ICSGenerator.generate(this.events)], {type:'text/calendar'}));
+        a.download = 'smart_schedule.ics';
         a.click();
-        document.body.removeChild(a);
-        UI.log("// File downloaded.");
     }
 };
 
-// Start the App
 UI.init();
-
 </script>
 </body>
 </html>
