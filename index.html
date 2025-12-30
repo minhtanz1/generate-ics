@@ -208,7 +208,10 @@ class TimeManager {
 
 /* ================= SMART SCHEDULER ================= */
 class SmartScheduler {
-    constructor() { this.tm = new TimeManager(); }
+    constructor() {
+        this.tm = new TimeManager();
+    }
+
     process(tasks, startStr, endStr, options) {
         const startDate = new Date(startStr);
         const endDate = new Date(endStr);
@@ -216,9 +219,13 @@ class SmartScheduler {
 
         const availableMins = this.tm.calculateAvailableMinutes(startDate, endDate);
         const totalWeight = tasks.reduce((sum, t) => sum + t.weight, 0);
+        
         if (availableMins <= 0 || totalWeight === 0) throw new Error("Invalid time range or weights.");
 
-        const workableRatio = leitner ? 0.85 : 1.0; 
+        // Giảm workableRatio xuống một chút để trừ hao cho Buffer time (nghỉ giải lao)
+        // Nếu không trừ hao, các task cuối sẽ bị đẩy ra khỏi khung giờ
+        const bufferOverhead = 0.1; // 10% dành cho buffer
+        const workableRatio = leitner ? (0.85 - bufferOverhead) : (1.0 - bufferOverhead); 
         const usableMinutes = availableMins * workableRatio;
 
         let taskQueues = {}; 
@@ -226,67 +233,115 @@ class SmartScheduler {
         tasks.forEach(task => {
             const ratio = task.weight / totalWeight;
             const taskTotalMins = Math.floor(usableMinutes * ratio);
+            
+            // Tính số lượng Work chunks
             let workCount = Math.max(1, Math.floor(taskTotalMins / chunkSize));
 
             taskQueues[task.name] = [];
+            
+            // --- LOGIC MỚI: Cài răng lược Review vào giữa Work ---
+            let worksSinceLastReview = 0;
+            const reviewInterval = 3; // Cứ 3 Work thì 1 Review (Leitner spacing)
+
             for (let i = 0; i < workCount; i++) {
+                // 1. Push Work Chunk
                 taskQueues[task.name].push({
                     type: 'WORK',
                     title: task.name,
                     duration: chunkSize,
                     desc: `Deep Work Session (${i+1}/${workCount})`,
-                    customNote: '' // Init empty custom note
+                    customNote: ''
                 });
-            }
 
-            if (leitner) {
-                const reviewCount = Math.max(1, Math.floor(workCount / 3)); 
-                for (let j = 0; j < reviewCount; j++) {
+                worksSinceLastReview++;
+
+                // 2. Check & Inject Review Chunk ngay lập tức
+                if (leitner && worksSinceLastReview >= reviewInterval) {
                     taskQueues[task.name].push({
                         type: 'REVIEW',
                         title: `Review: ${task.name}`,
                         duration: reviewSize,
-                        desc: `Spaced Repetition Review`,
+                        desc: `Spaced Repetition (Interval Check)`,
+                        customNote: ''
+                    });
+                    worksSinceLastReview = 0; // Reset đếm
+                }
+            }
+
+            // 3. Đảm bảo luôn có ít nhất 1 Review nếu task quan trọng (nhiều work) mà bị lẻ
+            // Hoặc task ngắn nhưng vẫn cần review
+            if (leitner) {
+                // Kiểm tra xem trong queue đã có review nào chưa
+                const hasReview = taskQueues[task.name].some(t => t.type === 'REVIEW');
+                // Nếu chưa có (do workCount < 3) -> Thêm 1 cái vào cuối
+                if (!hasReview) {
+                     taskQueues[task.name].push({
+                        type: 'REVIEW',
+                        title: `Review: ${task.name}`,
+                        duration: reviewSize,
+                        desc: `Final Review`,
                         customNote: ''
                     });
                 }
             }
         });
 
+        // 4. Interleaving (Trộn các hàng đợi của từng task với nhau)
         let finalQueue = [];
         if (interleaving) {
             const names = Object.keys(taskQueues);
             let maxLen = Math.max(...names.map(n => taskQueues[n].length));
+            
             for (let i = 0; i < maxLen; i++) {
                 names.forEach(name => {
-                    if (taskQueues[name][i]) finalQueue.push(taskQueues[name][i]);
+                    if (taskQueues[name][i]) {
+                        finalQueue.push(taskQueues[name][i]);
+                    }
                 });
             }
         } else {
-            for (let name in taskQueues) finalQueue = finalQueue.concat(taskQueues[name]);
+            // Nếu không trộn, xếp nối đuôi nhau
+            for (let name in taskQueues) {
+                finalQueue = finalQueue.concat(taskQueues[name]);
+            }
         }
 
+        // 5. Time Mapping (Gán giờ thực tế)
         let schedule = [];
         let cursor = this.tm.getNextValidTime(startDate);
 
         finalQueue.forEach(item => {
             if (cursor >= endDate) return;
+
             let slotStart = new Date(cursor);
             let slotEnd = new Date(cursor);
             let needed = item.duration;
             let fits = false;
 
+            // Tìm slot trống đủ cho duration (needed)
             while(!fits && slotStart < endDate) {
                 let tempCursor = new Date(slotStart);
                 let isInterrupted = false;
+                
+                // Check từng phút xem có bị vướng Blocked Hours không
                 for(let m=0; m<needed; m++) {
-                    if(this.tm.isBlocked(tempCursor)) { isInterrupted = true; break; }
+                    if(this.tm.isBlocked(tempCursor)) {
+                        isInterrupted = true;
+                        break;
+                    }
                     tempCursor.setMinutes(tempCursor.getMinutes() + 1);
                 }
-                if(!isInterrupted) { slotEnd = tempCursor; fits = true; } 
-                else { slotStart = this.tm.getNextValidTime(tempCursor); }
+
+                if(!isInterrupted) {
+                    slotEnd = tempCursor;
+                    fits = true;
+                } else {
+                    // Nếu vướng, nhảy cursor đến vùng khả dụng tiếp theo
+                    slotStart = this.tm.getNextValidTime(tempCursor);
+                }
             }
 
+            // Nếu tìm được slot và chưa vượt quá deadline tổng
             if (fits && slotEnd <= endDate) {
                 schedule.push({
                     title: item.title,
@@ -294,13 +349,16 @@ class SmartScheduler {
                     start: new Date(slotStart),
                     end: new Date(slotEnd),
                     description: item.desc,
-                    customNote: ''
+                    customNote: item.customNote || ''
                 });
+
+                // Cập nhật cursor cho task tiếp theo (+ Buffer nghỉ ngơi)
                 cursor = new Date(slotEnd);
                 cursor.setMinutes(cursor.getMinutes() + CONFIG.bufferMinutes);
                 cursor = this.tm.getNextValidTime(cursor);
             }
         });
+
         return schedule;
     }
 }
